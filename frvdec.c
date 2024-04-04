@@ -55,21 +55,67 @@ static int frv_decode4(uint32_t inst, FrvInst* restrict frv_inst) {
   case 0x04:
     switch (funct3) {
     case 0: encoding = ENC_I; mnem = FRV_ADDI; break;
-    case 1: encoding = ENC_I_SHAMT; mnem = FRV_SLLI; break;
+    case 1:
+      switch (funct7 >> 1) {
+      case 0: encoding = ENC_I_SHAMT; mnem = FRV_SLLI; break;
+      case 0x0a: encoding = ENC_I_SHAMT; mnem = FRV_BSETI; break;
+      case 0x12: encoding = ENC_I_SHAMT; mnem = FRV_BCLRI; break;
+      case 0x18: encoding = ENC_R2;
+        switch (UBFX(inst, 20, 24)) {
+        case 0: mnem = FRV_CLZ; break;
+        case 1: mnem = FRV_CTZ; break;
+        case 2: mnem = FRV_CPOP; break;
+        case 4: mnem = FRV_SEXTB; break;
+        case 5: mnem = FRV_SEXTH; break;
+        default: return FRV_UNDEF;
+        }
+        break;
+      case 0x1a: encoding = ENC_I_SHAMT; mnem = FRV_BINVI; break;
+      default: return FRV_UNDEF;
+      }
+      break;
     case 2: encoding = ENC_I; mnem = FRV_SLTI; break;
     case 3: encoding = ENC_I; mnem = FRV_SLTIU; break;
     case 4: encoding = ENC_I; mnem = FRV_XORI; break;
-    case 5: encoding = ENC_I_SHAMT; mnem = funct7 & 0x20 ? FRV_SRAI : FRV_SRLI; break;
+    case 5:
+      switch(funct7 >> 1) {
+      case 0: encoding = ENC_I_SHAMT; mnem = FRV_SRLI; break;
+      case 0x0a: encoding = ENC_R2; mnem = FRV_ORCB; break;
+      case 0x10: encoding = ENC_I_SHAMT; mnem = FRV_SRAI; break;
+      case 0x12: encoding = ENC_I_SHAMT; mnem = FRV_BEXTI; break;
+      case 0x18: encoding = ENC_I_SHAMT; mnem = FRV_RORI; break;
+      case 0x1a: encoding = ENC_R2; mnem = FRV_REV8; break;
+      }
+      break;
     case 6: encoding = ENC_I; mnem = FRV_ORI; break;
     case 7: encoding = ENC_I; mnem = FRV_ANDI; break;
+    default: return FRV_UNDEF;
     }
     break;
   case 0x05: encoding = ENC_U; mnem = FRV_AUIPC; break;
   case 0x06:
     switch (funct3) {
     case 0: encoding = ENC_I; mnem = FRV_ADDIW; break;
-    case 1: encoding = ENC_I_SHAMT; mnem = FRV_SLLIW; break;
-    case 5: encoding = ENC_I_SHAMT; mnem = funct7 & 0x20 ? FRV_SRAIW : FRV_SRLIW; break;
+    case 1:
+      switch (funct7) {
+      case 0x00: encoding = ENC_I_SHAMT; mnem = FRV_SLLIW; break;
+      case 0x04: encoding = ENC_I_SHAMT; mnem = FRV_SLLIUW; break;
+      case 0x30: encoding = ENC_R2;
+        switch (UBFX(inst, 20, 24)) {
+        case 0: mnem = FRV_CLZW; break;
+        case 1: mnem = FRV_CTZW; break;
+        case 2: mnem = FRV_CPOPW; break;
+        default: return FRV_UNDEF;
+        }
+      }
+      break;
+    case 5: encoding = ENC_I_SHAMT;
+      switch (funct7) {
+      case 0x00: mnem = FRV_SRLIW; break;
+      case 0x20: mnem = FRV_SRAIW; break;
+      case 0x30: mnem = FRV_RORIW; break;
+      }
+      break;
     default: return FRV_UNDEF;
     }
     break;
@@ -99,7 +145,13 @@ static int frv_decode4(uint32_t inst, FrvInst* restrict frv_inst) {
     switch (funct7) {
     case 0x00: mnem = (const uint16_t[]) {FRV_ADD, FRV_SLL, FRV_SLT, FRV_SLTU, FRV_XOR, FRV_SRL, FRV_OR, FRV_AND}[funct3]; break;
     case 0x01: mnem = (const uint16_t[]) {FRV_MUL, FRV_MULH, FRV_MULHSU, FRV_MULHU, FRV_DIV, FRV_DIVU, FRV_REM, FRV_REMU}[funct3]; break;
-    case 0x20: mnem = (const uint16_t[]) {FRV_SUB, 0, 0, 0, 0, FRV_SRA, 0, 0}[funct3]; break;
+    case 0x05: mnem = (const uint16_t[]) {0, FRV_CLMUL, FRV_CLMULR, FRV_CLMULH, FRV_MIN, FRV_MINU, FRV_MAX, FRV_MAXU}[funct3]; break;
+    case 0x10: mnem = (const uint16_t[]) {0, 0, FRV_SH1ADD, 0, FRV_SH2ADD, 0, FRV_SH3ADD, 0}[funct3]; break;
+    case 0x14: mnem = (const uint16_t[]) {0, FRV_BSET, 0, 0, 0, 0, 0, 0}[funct3]; break;
+    case 0x20: mnem = (const uint16_t[]) {FRV_SUB, 0, 0, 0, FRV_XNOR, FRV_SRA, FRV_ORN, FRV_ANDN}[funct3]; break;
+    case 0x24: mnem = (const uint16_t[]) {0, FRV_BCLR, 0, 0, 0, FRV_BEXT, 0, 0}[funct3]; break;
+    case 0x30: mnem = (const uint16_t[]) {0, FRV_ROL, 0, 0, 0, FRV_ROR, 0, 0}[funct3]; break;
+    case 0x34: mnem = (const uint16_t[]) {0, FRV_BINV, 0, 0, 0, 0, 0, 0}[funct3]; break;
     default: return FRV_UNDEF;
     }
     break;
@@ -108,7 +160,12 @@ static int frv_decode4(uint32_t inst, FrvInst* restrict frv_inst) {
     switch (funct7) {
     case 0x00: mnem = (const uint16_t[]) {FRV_ADDW, FRV_SLLW, 0, 0, 0, FRV_SRLW, 0, 0}[funct3]; break;
     case 0x01: mnem = (const uint16_t[]) {FRV_MULW, 0, 0, 0, FRV_DIVW, FRV_DIVUW, FRV_REMW, FRV_REMUW}[funct3]; break;
+    case 0x04:
+      encoding = (const uint16_t[]) {ENC_R, 0, 0, 0, ENC_R2, 0, 0, 0}[funct3];
+      mnem = (const uint16_t[]) {FRV_ADDUW, 0, 0, 0, FRV_ZEXTH, 0, 0, 0}[funct3]; break;
+    case 0x10: mnem = (const uint16_t[]) {0, 0, FRV_SH1ADDUW, 0, FRV_SH2ADDUW, 0, FRV_SH3ADDUW, 0}[funct3]; break;
     case 0x20: mnem = (const uint16_t[]) {FRV_SUBW, 0, 0, 0, 0, FRV_SRAW, 0, 0}[funct3]; break;
+    case 0x30: mnem = (const uint16_t[]) {0, FRV_ROLW, 0, 0, 0, FRV_RORW, 0, 0}[funct3]; break;
     default: return FRV_UNDEF;
     }
     break;
@@ -521,6 +578,19 @@ void frv_format(const FrvInst* inst, size_t len, char* restrict buf) {
     [FRV_FCVTLD] = "fcvt.l.d", [FRV_FCVTLUD] = "fcvt.lu.d",
     [FRV_FCVTDW] = "fcvt.d.w", [FRV_FCVTDWU] = "fcvt.d.wu",
     [FRV_FCVTDL] = "fcvt.d.l", [FRV_FCVTDLU] = "fcvt.d.lu",
+    [FRV_SH1ADD] = "sh1add", [FRV_SH2ADD] = "sh2add", [FRV_SH3ADD] = "sh3add",
+    [FRV_SH1ADDUW] = "sh1add.uw", [FRV_SH2ADDUW] = "sh2add.uw", [FRV_SH3ADDUW] = "sh3add.uw",
+    [FRV_ADDUW] = "add.uw", [FRV_SLLIUW] = "slli.uw",
+    [FRV_ANDN] = "andn", [FRV_CLZ] = "clz", [FRV_CPOP] = "cpop", [FRV_CTZ] = "ctz",
+    [FRV_MAX] = "max", [FRV_MAXU] = "maxu", [FRV_MIN] = "min", [FRV_MINU] = "minu",
+    [FRV_ORCB] = "orc.b", [FRV_ORN] = "orn", [FRV_REV8] = "rev8", [FRV_ROL] = "rol",
+    [FRV_ROR] = "ror", [FRV_RORI] = "rori", [FRV_SEXTB] = "sext.b", [FRV_SEXTH] = "sext.h",
+    [FRV_XNOR] = "xnor", [FRV_ZEXTH] = "zext.h",
+    [FRV_CLZW] = "clzw", [FRV_CPOPW] = "cpopw", [FRV_CTZW] = "ctzw",
+    [FRV_ROLW] = "rolw", [FRV_RORW] = "rorw", [FRV_RORIW] = "roriw",
+    [FRV_CLMUL] = "clmul", [FRV_CLMULH] = "clmulh", [FRV_CLMULR] = "clmulr",
+    [FRV_BCLR] = "bclr", [FRV_BCLRI] = "bclri", [FRV_BEXT] = "bext", [FRV_BEXTI] = "bexti",
+    [FRV_BINV] = "binv", [FRV_BINVI] = "binvi", [FRV_BSET] = "bset", [FRV_BSETI] = "bseti",
   };
   if (inst->mnem >= sizeof mnem_str / sizeof mnem_str[0] || !mnem_str[inst->mnem]) {
     strlcat(buf, "<invalid>", len);
